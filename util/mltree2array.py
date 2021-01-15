@@ -36,8 +36,8 @@ def preprocess(clusters, branches, flatten = False, label = 0):
     data[br] = np.zeros(ncl)
 
   # fill the image arrays and the supplemental info
-  for i in xrange(ncl):
-    for j in xrange(nbr):
+  for i in range(ncl):
+    for j in range(nbr):
       data[branches[j]][i] = clusters[i][j]
       if flatten: data[branches[j]][i] = data[branches[j]][i].flatten()
 
@@ -48,15 +48,15 @@ def preprocess(clusters, branches, flatten = False, label = 0):
 
 def export(data, output, compress):
   """ Export data to file """
-
+  print("data: " + str(data))
   if compress:
     np.savez_compressed(output, **data)
   else:
     np.save(output, **data)
 
 if __name__ == "__main__":
-
-  default_branches = ['EMB1', 'EMB2', 'EMB3', 'TileBar0', 'TileBar1', 'TileBar2', 'clusterE', 'clusterPt', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_sumCellE', 'cluster_emProb']
+  default_branches = ['EMB1', 'EMB2', 'EMB3', 'TileBar0', 'TileBar1', 'TileBar2', 'clusterE', 'clusterPt', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_sumCellE']
+#   default_branches = ['EMB1', 'EMB2', 'EMB3', 'TileBar0', 'TileBar1', 'TileBar2', 'clusterE', 'clusterPt', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_sumCellE', 'cluster_emProb']
 #  default_branches = ['EMB1', 'EMB2', 'EMB3', 'TileBar0', 'TileBar1', 'TileBar2', 'clusterE', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_sumCellE', 'cluster_emProb']
  # default_branches = ['EMB1', 'EMB2', 'EMB3', 'TileBar0', 'TileBar1', 'TileBar2', 'clusterE', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_emProb']
 
