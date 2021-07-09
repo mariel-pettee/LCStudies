@@ -22,6 +22,7 @@ pi0_list =  glob(data_path_pi0 + '*root')
 with ur.open(data_path + 'cell_geo.root') as file:
     geo_dict = gu.loadGraphDictionary(file['CellGeo'])
 
+
 #pipm_list = ['/fast_scratch/atlas_images/v01-45/pipm/user.angerami.24559744.OutputStream._000421.root']
 # pi0_list = ['/Users/swiatlow/Data/caloml/graph_data/pi0/user.angerami.24559740.OutputStream._000116.root']
 
@@ -95,10 +96,10 @@ def convertFile(filename, label, debug):
         del cell_e, cell_eta, cell_id, cell_phi, cell_samp, clus_phi, clus_e, clus_eta, clus_targetE
 
 
-# for pipm_file in pipm_list:
-    # convertFile(pipm_file, 1, debug = False)
+for pipm_file in pipm_list:
+    convertFile(pipm_file, 1, debug = False)
 
-pi0_list = ['/Users/swiatlow/Data/caloml/graph_data/pi0/user.angerami.24559740.OutputStream._000116.root']
+# pi0_list = ['/Users/swiatlow/Data/caloml/graph_data/pi0/user.angerami.24559740.OutputStream._000116.root']
 
 for pi0_file in pi0_list:
     convertFile(pi0_file, 0, debug = False)
