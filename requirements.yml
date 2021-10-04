@@ -1,5 +1,6 @@
 name: ml4pions
 channels:
+  - conda-forge
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=main
@@ -159,6 +160,7 @@ dependencies:
   - pip:
     - anyio==3.3.1
     - atlas-mpl-style==0.17.2
+    - awkward==1.5.0
     - awkward0==0.15.5
     - babel==2.9.1
     - bokeh==2.4.0
@@ -194,7 +196,6 @@ dependencies:
     - threadpoolctl==2.1.0
     - tqdm==4.61.1
     - typing-extensions==3.10.0.2
-    - uproot3==3.14.4
-    - uproot3-methods==0.10.0
+    - uproot==4.1.2
     - websocket-client==1.2.1
 prefix: /clusterfs/ml4hep/mpettee/miniconda3/envs/ml4pions
