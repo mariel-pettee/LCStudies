@@ -1,4 +1,5 @@
 datasets
+classifier/logs/*
 .ipynb*
 .DS_Store
 .root

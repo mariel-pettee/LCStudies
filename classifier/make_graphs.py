@@ -162,6 +162,7 @@ if __name__ == "__main__":
     
     ### Get assigned dataframe rows for this worker
     worker_events = get_worker_events(df, args.total_workers, args.worker_id)
+    print("Generating graphs for events {} - {}.".format(worker_events[0], worker_events[-1]))
     
     ### Make the graphs for the specified events
     graph_list = []
