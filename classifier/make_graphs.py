@@ -50,10 +50,12 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("total_workers", type=int, help="Total number of Slurm worker nodes")
     parser.add_argument("worker_id", type=int, help="Slurm worker node ID number")
+    parser.add_argument("input_dir", help="Input directory of .root files")
     parser.add_argument("save_dir", help="Output directory of graph .pkl files")
+    parser.add_argument("is_charged", default=False, action='store_true', help="Use this flag for charged pion samples.")
     return parser.parse_args()
 
-def make_graph(event: pd.Series, geo_df: pd.DataFrame, is_charged=False):
+def make_graph(event: pd.Series, geo_df: pd.DataFrame, is_charged=args.is_charged):
     """
     Creates a graph representation of an event
     
@@ -130,8 +132,8 @@ def make_graph(event: pd.Series, geo_df: pd.DataFrame, is_charged=False):
     
     return input_graph, target_graph
 
-def get_worker_events(df, n_workers, worker_id):
-    return np.array_split(range(len(df)), n_workers)[worker_id]
+def divide_chunks(l, n):
+    return [l[i::n] for i in range(n)]
 
 if __name__ == "__main__":
     args = get_args()
@@ -140,36 +142,35 @@ if __name__ == "__main__":
     print("This is worker #{}.".format(args.worker_id))
     print("Saving graphs to folder: {}".format(args.save_dir))
     
-    ### Load ROOT file
-    file_path = '../data/neutral_pion_sample.root'
-    f_pi0 = uproot.open(file_path)
+    ### Get the list of files for which this worker is responsible
+    files = glob(os.path.join(args.input_dir,'*.root'))
+    chunks = list(divide_chunks(files, args.total_workers))
+    worker_files = chunks[args.worker_id]
+    print("{} files for worker #{}:".format(len(chunks[args.worker_id]),args.worker_id))
+    print(worker_files) 
     
-    ### Define primary dataframe
-    df = f_pi0['EventTree'].arrays(["cluster_cell_E", "cluster_cell_ID", "cluster_E", "cluster_Eta", "cluster_Phi"], library="pd")
-    df.reset_index(inplace=True) # flatten MultiIndexing
-#     df = df[:100] ### TEMPORARY -- limit to first 100 events
+    for file in tqdm(worker_files):
+        ### Define primary dataframe
+        df = file['EventTree'].arrays(["cluster_cell_E", "cluster_cell_ID", "cluster_E", "cluster_Eta", "cluster_Phi"], library="pd")
+        df.reset_index(inplace=True) # flatten MultiIndexing
 
-    ### Define cell geometry dataframe
-    df_geo = f_pi0['CellGeo'].arrays(library="pd")
-    df_geo = df_geo.reset_index() # remove redundant multi-indexing
-    df_geo.drop(columns = ["entry", "subentry"], inplace=True)
+        ### Define cell geometry dataframe
+        df_geo = file['CellGeo'].arrays(library="pd")
+        df_geo = df_geo.reset_index() # remove redundant multi-indexing
+        df_geo.drop(columns = ["entry", "subentry"], inplace=True)
 
-    ### Add x,y,z coordinates
-    df_geo["cell_geo_x"] = df_geo["cell_geo_rPerp"] * np.cos(df_geo["cell_geo_phi"])
-    df_geo["cell_geo_y"] = df_geo["cell_geo_rPerp"] * np.sin(df_geo["cell_geo_phi"])
-    cell_geo_theta = 2*np.arctan(np.exp(-df_geo["cell_geo_eta"]))
-    df_geo["cell_geo_z"] = df_geo["cell_geo_rPerp"] / np.tan(cell_geo_theta)
-    
-    ### Get assigned dataframe rows for this worker
-    worker_events = get_worker_events(df, args.total_workers, args.worker_id)
-    print("Generating graphs for events {} - {}.".format(worker_events[0], worker_events[-1]))
-    
-    ### Make the graphs for the specified events
-    graph_list = []
-    for i in tqdm(worker_events):
-        graph_list.append(make_graph(df.iloc[i], geo_df=df_geo, is_charged=False))
-    
-    ### Save Pickle file, with zero-indexing: 
-    filepath = os.path.join(args.save_dir,'pi0_graphs_chunk_'+str(args.worker_id)+'_of_'+str(args.total_workers - 1)+'.pkl')
-    with open(filepath, 'wb') as f:
-        pickle.dump(graph_list, f)
+        ### Add x,y,z coordinates
+        df_geo["cell_geo_x"] = df_geo["cell_geo_rPerp"] * np.cos(df_geo["cell_geo_phi"])
+        df_geo["cell_geo_y"] = df_geo["cell_geo_rPerp"] * np.sin(df_geo["cell_geo_phi"])
+        cell_geo_theta = 2*np.arctan(np.exp(-df_geo["cell_geo_eta"]))
+        df_geo["cell_geo_z"] = df_geo["cell_geo_rPerp"] / np.tan(cell_geo_theta)
+
+        ### Make the graphs for the specified events
+        graph_list = []
+        for i in range(len(df)):
+            graph_list.append(make_graph(df.iloc[i], geo_df=df_geo, is_charged=args.is_charged))
+
+        ### Save Pickle file, with zero-indexing: 
+        filepath = os.path.join(args.save_dir,file.split('.')[-2][1:]+'.pkl')
+        with open(filepath, 'wb') as f:
+            pickle.dump(graph_list, f)
