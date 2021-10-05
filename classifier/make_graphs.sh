@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --constraint=knl
 #SBATCH --time=10:00
-#SBATCH --array=0-9
+#SBATCH --array=0-99
 #SBATCH --output logs/log.log
 
 conda activate ml4pions

@@ -147,7 +147,7 @@ if __name__ == "__main__":
     ### Define primary dataframe
     df = f_pi0['EventTree'].arrays(["cluster_cell_E", "cluster_cell_ID", "cluster_E", "cluster_Eta", "cluster_Phi"], library="pd")
     df.reset_index(inplace=True) # flatten MultiIndexing
-    df = df[:100] ### TEMPORARY -- limit to first 100 events
+#     df = df[:100] ### TEMPORARY -- limit to first 100 events
 
     ### Define cell geometry dataframe
     df_geo = f_pi0['CellGeo'].arrays(library="pd")
