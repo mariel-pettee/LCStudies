@@ -1,7 +1,5 @@
 ### Generic imports
 import os
-import sys
-import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -10,8 +8,11 @@ import scipy
 import uproot
 from tqdm import tqdm
 import functools
+from glob import glob
+from multiprocessing import Pool
+import time
 import pickle
-from glob import glob 
+import argparse
 
 ### ML-related
 import tensorflow as tf
@@ -32,12 +33,18 @@ import networkx as nx
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("total_workers", type=int, help="Total number of Slurm worker nodes")
-    parser.add_argument("worker_id", type=int, help="Slurm worker node ID number")
-    parser.add_argument("input_dir", help="Input directory of .root files")
-    parser.add_argument("save_dir", help="Output directory of graph .pkl files")
+    parser.add_argument("num_processes", type=int, help="Number of processes for multiprocessing (maximum = number of CPUs available)")
     parser.add_argument("--is_charged", default=False, action='store_true', help="Use this flag for charged pion samples.")
     return parser.parse_args()
+
+def async_tqdm(func, argument_list, num_processes):
+    pool = Pool(processes=num_processes)
+    jobs = [pool.apply_async(func=func, args=(*argument,)) if isinstance(argument, tuple) else pool.apply_async(func=func, args=(argument,)) for argument in argument_list]
+    pool.close()
+    result_list_tqdm = []
+    for job in tqdm(jobs, desc="Jobs"):
+        result_list_tqdm.append(job.get())
+    return result_list_tqdm
 
 def make_graph(event: pd.Series, geo_df: pd.DataFrame, is_charged=False):
     """
@@ -98,7 +105,7 @@ def make_graph(event: pd.Series, geo_df: pd.DataFrame, is_charged=False):
         "edges": edges,
         "senders": senders,
         "receivers": receivers,
-        "globals": global_values            # np.array([n_nodes], dtype=np.float32)
+        "globals": global_values
     }
     
     target_datadict = {
@@ -116,48 +123,57 @@ def make_graph(event: pd.Series, geo_df: pd.DataFrame, is_charged=False):
     
     return input_graph, target_graph
 
-def divide_chunks(l, n):
-    return [l[i::n] for i in range(n)]
+def process_file(file, is_charged: bool = False):
+    ### Define primary dataframe
+    f = uproot.open(file)
+    df = f['EventTree'].arrays(["cluster_cell_E", "cluster_cell_ID", "cluster_E", "cluster_Eta", "cluster_Phi"], library="pd")
+    df.reset_index(inplace=True) # flatten MultiIndexing
 
+    ### Define cell geometry dataframe
+    df_geo = f['CellGeo'].arrays(library="pd")
+    df_geo = df_geo.reset_index() # remove redundant multi-indexing
+    df_geo.drop(columns = ["entry", "subentry"], inplace=True)
+
+    ### Add x,y,z coordinates
+    df_geo["cell_geo_x"] = df_geo["cell_geo_rPerp"] * np.cos(df_geo["cell_geo_phi"])
+    df_geo["cell_geo_y"] = df_geo["cell_geo_rPerp"] * np.sin(df_geo["cell_geo_phi"])
+    cell_geo_theta = 2*np.arctan(np.exp(-df_geo["cell_geo_eta"]))
+    df_geo["cell_geo_z"] = df_geo["cell_geo_rPerp"] / np.tan(cell_geo_theta)
+
+    ### Make the graphs for the specified events
+    graph_list = []
+    n_events = 100 # limit dataframe size for testing
+    for i in tqdm(range(len(df[:n_events])), desc="Generating graphs"):
+        graph_list.append(make_graph(df.iloc[i], geo_df=df_geo, is_charged=is_charged))
+
+    ### Save Pickle file, with zero-indexing:
+    if is_charged == False:
+        save_dir = "/global/cfs/cdirs/m3246/mpettee/ml4pions/LCStudies/graphs/neutral_pion/"
+    elif is_charged == True:
+        save_dir = "/global/cfs/cdirs/m3246/mpettee/ml4pions/LCStudies/graphs/charged_pion/"
+    os.makedirs(save_dir, exist_ok=True)
+    filepath = os.path.join(save_dir,file.split('.')[-2][1:]+'.pkl')
+    with open(filepath, 'wb') as f:
+        pickle.dump(graph_list, f)
+        
 if __name__ == "__main__":
     args = get_args()
+            
+    print("{} CPUs available.".format(os.cpu_count()))
+    print("Using {} processes.".format(args.num_processes))
     
-    print("Parallelizing with {} total workers.".format(args.total_workers))
-    print("This is worker #{}.".format(args.worker_id))
-    print("Saving graphs to folder: {}".format(args.save_dir))
+    pi0_files = glob('/global/cfs/cdirs/m3246/mpettee/ml4pions/LCStudies/data/*singlepi0*/*.root')
+    pion_files = glob('/global/cfs/cdirs/m3246/mpettee/ml4pions/LCStudies/data/*singlepion*/*.root')
     
-    ### Get the list of files for which this worker is responsible
-    files = glob(os.path.join(args.input_dir,'*.root'))
-    chunks = list(divide_chunks(files, args.total_workers))
-    worker_files = chunks[args.worker_id]
-    print("{} files for worker #{}:".format(len(chunks[args.worker_id]),args.worker_id))
-    print(worker_files) 
+    if args.is_charged: 
+        print("Processing CHARGED pion samples.")
+        file_list = pion_files[:4]
+        is_charged = [True]*4#len(file_list)
+    else:
+        print("Processing NEUTRAL pion samples.")
+        file_list = pi0_files[:4]
+        is_charged = [False]*4#len(file_list)
+        
+    ### Generate graphs in parallel via multiprocessing
+    async_tqdm(func=process_file, argument_list=zip(file_list, is_charged), num_processes=args.num_processes)
     
-    for file in tqdm(worker_files, desc="Worker files"):
-        ### Define primary dataframe
-        f = uproot.open(file)
-        df = f['EventTree'].arrays(["cluster_cell_E", "cluster_cell_ID", "cluster_E", "cluster_Eta", "cluster_Phi"], library="pd")
-#         df = df[:10] ### TEMPORARILY LIMIT DATAFRAME FOR TESTING
-        df.reset_index(inplace=True) # flatten MultiIndexing
-
-        ### Define cell geometry dataframe
-        df_geo = f['CellGeo'].arrays(library="pd")
-        df_geo = df_geo.reset_index() # remove redundant multi-indexing
-        df_geo.drop(columns = ["entry", "subentry"], inplace=True)
-
-        ### Add x,y,z coordinates
-        df_geo["cell_geo_x"] = df_geo["cell_geo_rPerp"] * np.cos(df_geo["cell_geo_phi"])
-        df_geo["cell_geo_y"] = df_geo["cell_geo_rPerp"] * np.sin(df_geo["cell_geo_phi"])
-        cell_geo_theta = 2*np.arctan(np.exp(-df_geo["cell_geo_eta"]))
-        df_geo["cell_geo_z"] = df_geo["cell_geo_rPerp"] / np.tan(cell_geo_theta)
-
-        ### Make the graphs for the specified events
-        graph_list = []
-        for i in range(len(df)):
-            graph_list.append(make_graph(df.iloc[i], geo_df=df_geo, is_charged=args.is_charged))
-
-        ### Save Pickle file:
-        os.makedirs(args.save_dir, exist_ok=True)
-        filepath = os.path.join(args.save_dir,file.split('.')[-2][1:]+'.pkl')
-        with open(filepath, 'wb') as f:
-            pickle.dump(graph_list, f)
