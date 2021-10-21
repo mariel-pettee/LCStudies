@@ -143,7 +143,7 @@ def process_file(file, is_charged: bool = False):
     ### Make the graphs for the specified events
     graph_list = []
     n_events = 100 # limit dataframe size for testing
-    for i in tqdm(range(len(df[:n_events])), desc="Generating graphs"):
+    for i in range(len(df[:n_events])):
         graph_list.append(make_graph(df.iloc[i], geo_df=df_geo, is_charged=is_charged))
 
     ### Save Pickle file, with zero-indexing:
@@ -167,12 +167,12 @@ if __name__ == "__main__":
     
     if args.is_charged: 
         print("Processing CHARGED pion samples.")
-        file_list = pion_files[:4]
-        is_charged = [True]*4#len(file_list)
+        file_list = pion_files
+        is_charged = [True]*len(file_list)
     else:
         print("Processing NEUTRAL pion samples.")
-        file_list = pi0_files[:4]
-        is_charged = [False]*4#len(file_list)
+        file_list = pi0_files
+        is_charged = [False]*len(file_list)
         
     ### Generate graphs in parallel via multiprocessing
     async_tqdm(func=process_file, argument_list=zip(file_list, is_charged), num_processes=args.num_processes)
